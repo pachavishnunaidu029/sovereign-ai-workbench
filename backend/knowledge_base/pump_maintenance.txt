@@ -1,0 +1,41 @@
+PUMP MAINTENANCE PROCEDURE
+
+Document ID: SOP-P204-001
+
+Equipment: Cooling Water Pump P-204
+
+1. PURPOSE
+
+This procedure defines the maintenance requirements for Cooling Water Pump P-204.
+
+2. MECHANICAL SEAL
+
+The mechanical seal must be inspected for leakage during routine maintenance.
+
+Minor leakage should be monitored and recorded.
+
+If leakage increases or becomes continuous, the mechanical seal should be repaired or replaced.
+
+3. FLANGE
+
+The discharge flange should be inspected for surface corrosion.
+
+Minor corrosion should be cleaned and monitored.
+
+Severe corrosion requires engineering evaluation and corrective maintenance.
+
+4. ALIGNMENT
+
+Pump shaft alignment should be checked during scheduled maintenance.
+
+Alignment deviation greater than 1.0 mm requires corrective action.
+
+5. FOLLOW-UP INSPECTION
+
+After completing maintenance, a follow-up inspection should be performed.
+
+The equipment should only be returned to normal service after maintenance findings have been reviewed.
+
+6. SAFETY
+
+Maintenance personnel must follow applicable plant safety procedures and use appropriate personal protective equipment.
