@@ -1,4 +1,6 @@
-from fastapi import FastAPI, UploadFile, File
+from fastapi import FastAPI, UploadFile, File, Form
+from pydantic import BaseModel
+from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pathlib import Path
 import pytesseract
@@ -6,6 +8,7 @@ from PIL import Image
 import io
 import requests
 import json
+import re
 
 from report_generator import generate_inspection_report
 from model_router import select_model
@@ -14,9 +17,9 @@ from rag import search_documents
 from activity_logger import log_activity, get_logs
 
 
-# --------------------------------------------------
+# =====================================================
 # FastAPI Application
-# --------------------------------------------------
+# =====================================================
 
 app = FastAPI(
     title="Sovereign AI Workbench",
@@ -25,9 +28,9 @@ app = FastAPI(
 )
 
 
-# --------------------------------------------------
+# =====================================================
 # Directories
-# --------------------------------------------------
+# =====================================================
 
 UPLOAD_DIR = Path("uploads")
 UPLOAD_DIR.mkdir(exist_ok=True)
@@ -36,9 +39,9 @@ REPORT_DIR = Path("generated_reports")
 REPORT_DIR.mkdir(exist_ok=True)
 
 
-# --------------------------------------------------
+# =====================================================
 # Allowed File Types
-# --------------------------------------------------
+# =====================================================
 
 ALLOWED_TYPES = {
     "application/pdf",
@@ -48,18 +51,18 @@ ALLOWED_TYPES = {
 }
 
 
-# --------------------------------------------------
+# =====================================================
 # Tesseract Configuration
-# --------------------------------------------------
+# =====================================================
 
 pytesseract.pytesseract.tesseract_cmd = (
     r"C:\Program Files\Tesseract-OCR\tesseract.exe"
 )
 
 
-# --------------------------------------------------
+# =====================================================
 # CORS
-# --------------------------------------------------
+# =====================================================
 
 app.add_middleware(
     CORSMiddleware,
@@ -70,9 +73,9 @@ app.add_middleware(
 )
 
 
-# --------------------------------------------------
+# =====================================================
 # Root Endpoint
-# --------------------------------------------------
+# =====================================================
 
 @app.get("/")
 def root():
@@ -82,9 +85,9 @@ def root():
     }
 
 
-# --------------------------------------------------
+# =====================================================
 # Health Check
-# --------------------------------------------------
+# =====================================================
 
 @app.get("/api/health")
 def health_check():
@@ -95,9 +98,9 @@ def health_check():
     }
 
 
-# --------------------------------------------------
+# =====================================================
 # Upload Document
-# --------------------------------------------------
+# =====================================================
 
 @app.post("/api/upload")
 async def upload_document(file: UploadFile = File(...)):
@@ -127,9 +130,9 @@ async def upload_document(file: UploadFile = File(...)):
     }
 
 
-# --------------------------------------------------
+# =====================================================
 # OCR Endpoint
-# --------------------------------------------------
+# =====================================================
 
 @app.post("/api/ocr")
 async def perform_ocr(file: UploadFile = File(...)):
@@ -202,9 +205,9 @@ async def perform_ocr(file: UploadFile = File(...)):
         }
 
 
-# --------------------------------------------------
+# =====================================================
 # AI Text Analysis
-# --------------------------------------------------
+# =====================================================
 
 @app.post("/api/ai/analyze")
 async def analyze_text(text: str):
@@ -246,7 +249,9 @@ Inspection Text:
 
         result = response.json()
 
-        log_activity("AI text analysis completed using local AI model")
+        log_activity(
+            "AI text analysis completed using local AI model"
+        )
 
     except requests.RequestException as e:
 
@@ -264,9 +269,9 @@ Inspection Text:
     }
 
 
-# --------------------------------------------------
+# =====================================================
 # Inspection + OCR + AI
-# --------------------------------------------------
+# =====================================================
 
 @app.post("/api/inspect")
 async def inspect_document(file: UploadFile = File(...)):
@@ -328,6 +333,7 @@ async def inspect_document(file: UploadFile = File(...)):
 
 
     # Step 2: Local LLM
+
     ollama_url = "http://localhost:11434/api/generate"
 
     prompt = f"""
@@ -392,9 +398,9 @@ Inspection Report:
     }
 
 
-# --------------------------------------------------
+# =====================================================
 # Structured Inspection + Word Report
-# --------------------------------------------------
+# =====================================================
 
 @app.post("/api/inspect/structured")
 async def inspect_document_structured(
@@ -406,9 +412,9 @@ async def inspect_document_structured(
     contents = await file.read()
 
 
-    # --------------------------------------------------
+    # =================================================
     # Step 1: OCR
-    # --------------------------------------------------
+    # =================================================
 
     if file.content_type in {"image/png", "image/jpeg"}:
 
@@ -465,9 +471,9 @@ async def inspect_document_structured(
         }
 
 
-    # --------------------------------------------------
+    # =================================================
     # Step 2: Ask Local LLM for Structured Information
-    # --------------------------------------------------
+    # =================================================
 
     prompt = f"""
 You are an AI assistant for confidential industrial inspection work.
@@ -537,9 +543,9 @@ Inspection Report:
         }
 
 
-    # --------------------------------------------------
+    # =================================================
     # Step 3: Convert LLM Response to JSON
-    # --------------------------------------------------
+    # =================================================
 
     try:
 
@@ -556,9 +562,9 @@ Inspection Report:
         }
 
 
-    # --------------------------------------------------
+    # =================================================
     # Step 4: Generate Word Report
-    # --------------------------------------------------
+    # =================================================
 
     try:
 
@@ -581,9 +587,9 @@ Inspection Report:
         }
 
 
-    # --------------------------------------------------
+    # =================================================
     # Step 5: Return Complete Result
-    # --------------------------------------------------
+    # =================================================
 
     return {
         "status": "success",
@@ -598,12 +604,18 @@ Inspection Report:
     }
 
 
-# --------------------------------------------------
+# =====================================================
 # Automatic Model Selection
-# --------------------------------------------------
+# =====================================================
+
+class ModelSelectionRequest(BaseModel):
+    task: str
+
 
 @app.post("/api/model/select")
-async def select_ai_model(task: str):
+async def select_ai_model(request: ModelSelectionRequest):
+
+    task = request.task
 
     result = select_model(task)
 
@@ -616,20 +628,65 @@ async def select_ai_model(task: str):
     }
 
 
-# --------------------------------------------------
+# =====================================================
+# Local Ollama Models
+# =====================================================
+
+@app.get("/api/models")
+async def get_local_models():
+
+    try:
+
+        response = requests.get(
+            "http://localhost:11434/api/tags",
+            timeout=10
+        )
+
+        if response.status_code != 200:
+
+            return {
+                "status": "error",
+                "message": "Could not retrieve local models"
+            }
+
+        data = response.json()
+
+        models = []
+
+        for model in data.get("models", []):
+
+            models.append({
+                "name": model.get("name"),
+                "size": model.get("size"),
+                "modified_at": model.get("modified_at")
+            })
+
+        return {
+            "status": "success",
+            "processing_mode": "local",
+            "models": models
+        }
+
+    except requests.RequestException as e:
+
+        return {
+            "status": "error",
+            "message": "Could not connect to local Ollama server",
+            "details": str(e)
+        }
+
+# =====================================================
 # Execute Task Using Automatically Selected Model
-# --------------------------------------------------
+# =====================================================
 
 @app.post("/api/agent/run")
 async def run_agent(task: str):
 
-    # Step 1: Select the appropriate model
     routing_result = select_model(task)
 
     selected_model = routing_result["model"]
     task_type = routing_result["task_type"]
 
-    # Step 2: Send task to selected local model
     prompt = f"""
 You are an AI assistant inside a sovereign, on-premise AI workbench.
 
@@ -672,8 +729,6 @@ Do not use external services.
             "details": str(e)
         }
 
-    # Step 3: Return result
-
     return {
         "status": "success",
         "task": task,
@@ -684,12 +739,22 @@ Do not use external services.
     }
 
 
-# --------------------------------------------------
+# =====================================================
 # Simple Agent Workflow
-# --------------------------------------------------
+# =====================================================
+
+class WorkflowTask(BaseModel):
+    task: str
+
 
 @app.post("/api/agent/workflow")
-async def agent_workflow(task: str):
+async def agent_workflow(request: WorkflowTask):
+
+    task = request.task
+
+    log_activity(
+        f"Workflow task received: {task}"
+    )
 
     # Step 1: Select model
     routing_result = select_model(task)
@@ -697,7 +762,11 @@ async def agent_workflow(task: str):
     selected_model = routing_result["model"]
     task_type = routing_result["task_type"]
 
-    # Step 2: Execute task
+    log_activity(
+        f"Workflow model selected: {selected_model}"
+    )
+
+    # Step 2: Execute task using local model
     prompt = f"""
 You are an AI agent inside a sovereign on-premise AI workbench.
 
@@ -744,55 +813,160 @@ Return:
             "details": str(e)
         }
 
-    # Step 3: Verify that a response was generated
-    ai_response = result.get("response", "").strip()
+    # Step 3: Verify response
+    ai_response = result.get(
+        "response",
+        ""
+    ).strip()
 
     if not ai_response:
+
         verification = "FAILED"
+
     else:
+
         verification = "PASSED"
 
-    # Step 4: Return complete workflow result
+    log_activity(
+        f"Workflow verification: {verification}"
+    )
+
+    # Step 4: Return complete workflow
     return {
+
         "status": "success",
+
         "workflow": [
             "Task received",
             "Model selected",
             "Task executed locally",
             "Response verified"
         ],
+
         "task": task,
+
         "task_type": task_type,
+
         "selected_model": selected_model,
+
         "processing_mode": "local",
+
         "verification": verification,
+
         "response": ai_response
     }
+
+
+# =====================================================
+# Helper: Clean Generated Python Code
+# =====================================================
+
+def clean_generated_code(code: str):
+
+    code = code.strip()
+
+    # Remove markdown fences
+    code = re.sub(
+        r"^```python\s*",
+        "",
+        code,
+        flags=re.IGNORECASE
+    )
+
+    code = re.sub(
+        r"^```\s*",
+        "",
+        code
+    )
+
+    code = re.sub(
+        r"\s*```$",
+        "",
+        code
+    )
+
+    return code.strip()
+
+
+# =====================================================
+# Helper: Generate Python Code Using Local Model
+# =====================================================
+
+def generate_python_code(task: str):
+
+    prompt = f"""
+You are a Python coding agent inside a sovereign
+on-premise AI workbench.
+
+Generate Python code for this task:
+
+{task}
+
+STRICT RULES:
+
+1. Return ONLY Python code.
+2. Do NOT use markdown.
+3. Do NOT use ``` symbols.
+4. Do NOT explain anything.
+5. Use correct Python indentation.
+6. Every statement inside a for loop, if statement,
+   function or other block MUST be indented correctly.
+7. Do not use external libraries.
+8. The program must print the final answer.
+9. Make sure the code can execute directly as a .py file.
+
+Return ONLY executable Python code.
+"""
+
+    response = requests.post(
+        "http://localhost:11434/api/generate",
+        json={
+            "model": "qwen2.5-coder:1.5b",
+            "prompt": prompt,
+            "stream": False
+        },
+        timeout=120
+    )
+
+    if response.status_code != 200:
+
+        raise RuntimeError(
+            "Coding model failed"
+        )
+
+    result = response.json()
+
+    generated_code = result.get(
+        "response",
+        ""
+    ).strip()
+
+    return clean_generated_code(
+        generated_code
+    )
 
 
 # --------------------------------------------------
 # Coding Agent with Sandbox Verification
 # --------------------------------------------------
 
+class CodingTask(BaseModel):
+    task: str
+
+
 @app.post("/api/agent/code")
-async def coding_agent(task: str):
+async def coding_agent(request: CodingTask):
+
+    task = request.task
 
     log_activity(f"Coding task received: {task}")
 
-    # Step 1: Select model
-    routing_result = select_model(task)
+    # Step 1: Select coding model
+    selected_model = "qwen2.5-coder:1.5b"
 
-    selected_model = routing_result["model"]
-
-    log_activity(f"Coding model selected: {selected_model}")
-
-    # Make sure the coding model is selected
-    if selected_model != "qwen2.5-coder:1.5b":
-
-        return {
-            "status": "error",
-            "message": "This endpoint is only for coding tasks."
-        }
+    log_activity(
+        f"Coding model selected: {selected_model}"
+    )
 
     # Step 2: Ask coding model to generate Python code
     prompt = f"""
@@ -803,9 +977,12 @@ Generate Python code for the following task:
 {task}
 
 IMPORTANT:
-- Return ONLY Python code.
-- Do not use markdown.
-- Do not use external libraries.
+- Return ONLY executable Python code.
+- Do NOT explain the code.
+- Do NOT use markdown.
+- Do NOT use ``` symbols.
+- Do NOT add any text before or after the Python code.
+- Do NOT use external libraries.
 - The program must print the final answer.
 """
 
@@ -844,26 +1021,30 @@ IMPORTANT:
         ""
     ).strip()
 
-    # Remove markdown code fences if the model adds them
+    # Remove markdown code fences
     if generated_code.startswith("```python"):
-        generated_code = generated_code[9:]
+        generated_code = generated_code[len("```python"):]
 
-    if generated_code.startswith("```"):
-        generated_code = generated_code[3:]
+    elif generated_code.startswith("```"):
+        generated_code = generated_code[len("```"):]
 
     if generated_code.endswith("```"):
         generated_code = generated_code[:-3]
 
     generated_code = generated_code.strip()
 
-    # Step 4: Execute generated code in sandbox
-    sandbox_result = run_python_code(generated_code)
+    # Step 4: Execute generated code
+    sandbox_result = run_python_code(
+        generated_code
+    )
 
     log_activity(
         f"Sandbox execution completed: {sandbox_result['status']}"
     )
 
-    log_activity("Coding workflow completed")
+    log_activity(
+        "Coding workflow completed"
+    )
 
     # Step 5: Return complete result
     return {
@@ -877,10 +1058,9 @@ IMPORTANT:
         "execution_error": sandbox_result["error"]
     }
 
-
-# --------------------------------------------------
+# =====================================================
 # End-to-End Industrial Inspection Agent
-# --------------------------------------------------
+# =====================================================
 
 @app.post("/api/agent/inspection")
 async def inspection_agent(file: UploadFile = File(...)):
@@ -889,10 +1069,13 @@ async def inspection_agent(file: UploadFile = File(...)):
         f"Inspection workflow started: {file.filename}"
     )
 
+
+    # =================================================
     # Step 1: Read uploaded file
+    # =================================================
+
     file_content = await file.read()
 
-    # Save temporary upload
     upload_dir = Path("uploads")
     upload_dir.mkdir(exist_ok=True)
 
@@ -901,7 +1084,11 @@ async def inspection_agent(file: UploadFile = File(...)):
     with open(file_path, "wb") as f:
         f.write(file_content)
 
+
+    # =================================================
     # Step 2: Perform OCR
+    # =================================================
+
     try:
 
         if file.filename.lower().endswith(".pdf"):
@@ -946,11 +1133,16 @@ async def inspection_agent(file: UploadFile = File(...)):
             "message": str(e)
         }
 
+
     log_activity(
         f"OCR completed: {file.filename}"
     )
 
+
+    # =================================================
     # Step 3: Select industrial inspection model
+    # =================================================
+
     routing_result = select_model(
         "Analyze industrial inspection report"
     )
@@ -961,7 +1153,11 @@ async def inspection_agent(file: UploadFile = File(...)):
         f"Inspection model selected: {selected_model}"
     )
 
+
+    # =================================================
     # Step 4: Analyze OCR text using local AI
+    # =================================================
+
     prompt = f"""
 You are an industrial inspection AI assistant.
 
@@ -1028,7 +1224,11 @@ Inspection Report:
             "message": str(e)
         }
 
+
+    # =================================================
     # Step 5: Generate Word report
+    # =================================================
+
     try:
 
         report_path = generate_inspection_report(
@@ -1036,7 +1236,6 @@ Inspection Report:
             structured_analysis
         )
 
-        # FIXED: log Word report generation
         log_activity(
             f"Word inspection report generated: {report_path}"
         )
@@ -1049,7 +1248,11 @@ Inspection Report:
             "message": str(e)
         }
 
+
+    # =================================================
     # Step 6: Verify report
+    # =================================================
+
     report_exists = Path(report_path).exists()
 
     if report_exists:
@@ -1060,11 +1263,16 @@ Inspection Report:
 
         verification = "FAILED"
 
+
     log_activity(
         "Inspection workflow completed successfully"
     )
 
+
+    # =================================================
     # Step 7: Return complete workflow
+    # =================================================
+
     return {
         "status": "success",
 
@@ -1093,18 +1301,28 @@ Inspection Report:
     }
 
 
-# --------------------------------------------------
+# =====================================================
 # Local RAG Question Answering
-# --------------------------------------------------
+# =====================================================
+
+class RAGQuery(BaseModel):
+    query: str
+
 
 @app.post("/api/rag/query")
-async def rag_query(query: str):
+async def rag_query(request: RAGQuery):
+
+    query = request.query
 
     log_activity(
         f"RAG query received: {query}"
     )
 
+
+    # =================================================
     # Step 1: Search local knowledge base
+    # =================================================
+
     results = search_documents(query)
 
     if not results:
@@ -1116,7 +1334,11 @@ async def rag_query(query: str):
             "processing_mode": "local"
         }
 
-    # Step 2: Use the best matching document
+
+    # =================================================
+    # Step 2: Use best matching document
+    # =================================================
+
     best_result = results[0]
 
     log_activity(
@@ -1125,7 +1347,11 @@ async def rag_query(query: str):
 
     context = best_result["text"]
 
-    # Step 3: Ask local AI using retrieved context
+
+    # =================================================
+    # Step 3: Ask local AI
+    # =================================================
+
     prompt = f"""
 You are an AI assistant operating inside a sovereign
 on-premise industrial AI workbench.
@@ -1175,6 +1401,11 @@ Answer clearly and concisely.
             "details": str(e)
         }
 
+
+    # =================================================
+    # Step 4: Log completion
+    # =================================================
+
     log_activity(
         "RAG answer generated by local AI model"
     )
@@ -1183,7 +1414,11 @@ Answer clearly and concisely.
         "RAG workflow completed"
     )
 
-    # Step 4: Return answer and source
+
+    # =================================================
+    # Step 5: Return answer
+    # =================================================
+
     return {
         "status": "success",
         "query": query,
@@ -1194,9 +1429,9 @@ Answer clearly and concisely.
     }
 
 
-# --------------------------------------------------
+# =====================================================
 # Activity Logs
-# --------------------------------------------------
+# =====================================================
 
 @app.get("/api/logs")
 async def activity_logs():
@@ -1206,3 +1441,29 @@ async def activity_logs():
         "processing_mode": "local",
         "logs": get_logs()
     }
+
+
+# =====================================================
+# Download Inspection Report
+# =====================================================
+
+@app.get("/api/report/download")
+async def download_report():
+
+    report_path = REPORT_DIR / "inspection_report.docx"
+
+    if not report_path.exists():
+
+        return {
+            "status": "error",
+            "message": "Inspection report not found"
+        }
+
+    return FileResponse(
+        path=report_path,
+        filename="Inspection_Report.docx",
+        media_type=(
+            "application/vnd.openxmlformats-officedocument."
+            "wordprocessingml.document"
+        )
+    )

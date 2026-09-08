@@ -1,4 +1,4 @@
-import { useState, useRef } from "react"
+import { useState, useRef, useEffect } from "react"
 import Login from "./Login"
 
 import {
@@ -27,7 +27,6 @@ const navigationItems = [
 function App() {
 
   const [isLoggedIn, setIsLoggedIn] = useState(false)
-
   const [activeItem, setActiveItem] = useState("Dashboard")
 
   const fileInputRef = useRef(null)
@@ -44,17 +43,108 @@ function App() {
   const [codingTask, setCodingTask] = useState("")
   const [codingResult, setCodingResult] = useState(null)
 
+  const [inspectionResult, setInspectionResult] = useState(null)
 
-  // ================= DOCUMENT PROCESSING =================
+  const [localModels, setLocalModels] = useState([])
+  const [modelSelection, setModelSelection] = useState(null)
+
+  useEffect(() => {
+
+  const fetchLocalModels = async () => {
+
+    try {
+
+      const response = await fetch(
+        "/api/models"
+      )
+
+      const data = await response.json()
+
+      if (data.status === "success") {
+        setLocalModels(data.models)
+      }
+
+    } catch (error) {
+
+      console.error(
+        "Could not fetch local models:",
+        error
+      )
+
+    }
+
+  }
+
+  fetchLocalModels()
+
+}, [])
+
+
+const handleModelSelection = async (task) => {
+
+  if (!task.trim()) return
+
+  try {
+
+    const response = await fetch(
+      "/api/model/select",
+      {
+        method: "POST",
+        headers: {
+  "Content-Type": "application/json"
+},
+body: JSON.stringify({
+  task: task
+})
+      }
+    )
+
+    const data = await response.json()
+
+    if (!response.ok || data.status !== "success") {
+      throw new Error(
+        data.message || "Model selection failed"
+      )
+    }
+
+    setModelSelection(data)
+
+    console.log(
+      "Model selection result:",
+      data
+    )
+
+  } catch (error) {
+
+    console.error(
+      "Model selection error:",
+      error
+    )
+
+    setModelSelection(null)
+
+  }
+}
+
+
+// =====================================================
+// DOCUMENT PROCESSING
+// =====================================================
 
   const handleFileSelect = (event) => {
+
     const file = event.target.files[0]
 
     if (file) {
+
       setSelectedFile(file)
+      setInspectionResult(null)
       setIsProcessing(false)
+
     }
+
   }
+
 
   const createActivityStep = (
     text,
@@ -66,7 +156,9 @@ function App() {
     time
   })
 
-  const handleProcessDocument = () => {
+
+  const handleProcessDocument = async () => {
+
     if (!selectedFile) return
 
     setIsProcessing(true)
@@ -79,252 +171,546 @@ function App() {
         "completed",
         startTime.toLocaleTimeString()
       ),
+
       createActivityStep(
-        "OCR processing",
+        "Sending document to local backend",
         "active",
         startTime.toLocaleTimeString()
       ),
+
+      createActivityStep(
+        "OCR processing",
+        "pending",
+        "--"
+      ),
+
       createActivityStep(
         "AI analysis",
         "pending",
         "--"
       ),
+
       createActivityStep(
-        "Knowledge base search",
-        "pending",
-        "--"
-      ),
-      createActivityStep(
-        "Generating approval note",
+        "Generating inspection report",
         "pending",
         "--"
       )
     ])
 
-    setTimeout(() => {
-      const time = new Date().toLocaleTimeString()
+
+    try {
+
+const formData = new FormData()
+
+formData.append("file", selectedFile)
+
+
+const response = await fetch(
+  "/api/agent/inspection",
+  {
+    method: "POST",
+    body: formData
+  }
+)
+
+
+const data = await response.json()
+
+
+      if (!response.ok || data.status !== "success") {
+
+        throw new Error(
+          data.message || "Inspection processing failed"
+        )
+
+      }
+
+
+      console.log(
+        "Backend inspection result:",
+        data
+      )
+
+
+      const completedTime =
+        new Date().toLocaleTimeString()
+
 
       setActivitySteps([
+
         createActivityStep(
           "Document uploaded",
           "completed",
           startTime.toLocaleTimeString()
         ),
+
         createActivityStep(
           "OCR completed",
           "completed",
-          time
+          completedTime
         ),
+
         createActivityStep(
-          "AI analysis",
-          "active",
-          time
+          "Industrial inspection model selected",
+          "completed",
+          completedTime
         ),
+
         createActivityStep(
-          "Knowledge base search",
-          "pending",
-          "--"
+          "Inspection analyzed locally",
+          "completed",
+          completedTime
         ),
+
         createActivityStep(
-          "Generating approval note",
-          "pending",
-          "--"
+          "Word report generated",
+          "completed",
+          completedTime
+        ),
+
+        createActivityStep(
+          "Report verified",
+          "completed",
+          completedTime
         )
-      ])
-    }, 1000)
 
-    setTimeout(() => {
-      const time = new Date().toLocaleTimeString()
-
-      setActivitySteps([
-        createActivityStep(
-          "Document uploaded",
-          "completed",
-          startTime.toLocaleTimeString()
-        ),
-        createActivityStep(
-          "OCR completed",
-          "completed",
-          new Date(
-            startTime.getTime() + 1000
-          ).toLocaleTimeString()
-        ),
-        createActivityStep(
-          "AI analysis completed",
-          "completed",
-          time
-        ),
-        createActivityStep(
-          "Knowledge base search",
-          "active",
-          time
-        ),
-        createActivityStep(
-          "Generating approval note",
-          "pending",
-          "--"
-        )
-      ])
-    }, 2000)
-
-    setTimeout(() => {
-      const time = new Date().toLocaleTimeString()
-
-      setActivitySteps([
-        createActivityStep(
-          "Document uploaded",
-          "completed",
-          startTime.toLocaleTimeString()
-        ),
-        createActivityStep(
-          "OCR completed",
-          "completed",
-          new Date(
-            startTime.getTime() + 1000
-          ).toLocaleTimeString()
-        ),
-        createActivityStep(
-          "AI analysis completed",
-          "completed",
-          new Date(
-            startTime.getTime() + 2000
-          ).toLocaleTimeString()
-        ),
-        createActivityStep(
-          "Knowledge base searched",
-          "completed",
-          time
-        ),
-        createActivityStep(
-          "Generating approval note",
-          "active",
-          time
-        )
-      ])
-    }, 3000)
-
-    setTimeout(() => {
-      const time = new Date().toLocaleTimeString()
-
-      setActivitySteps([
-        createActivityStep(
-          "Document uploaded",
-          "completed",
-          startTime.toLocaleTimeString()
-        ),
-        createActivityStep(
-          "OCR completed",
-          "completed",
-          new Date(
-            startTime.getTime() + 1000
-          ).toLocaleTimeString()
-        ),
-        createActivityStep(
-          "AI analysis completed",
-          "completed",
-          new Date(
-            startTime.getTime() + 2000
-          ).toLocaleTimeString()
-        ),
-        createActivityStep(
-          "Knowledge base searched",
-          "completed",
-          new Date(
-            startTime.getTime() + 3000
-          ).toLocaleTimeString()
-        ),
-        createActivityStep(
-          "Approval note generated",
-          "completed",
-          time
-        )
       ])
 
-      setIsProcessing(false)
 
-      setDocuments((prev) => [
-        ...prev,
+      setDocuments((previousDocuments) => [
+
+        ...previousDocuments,
+
         {
-          name: selectedFile.name,
+          name: data.filename,
           type: selectedFile.type,
           size: selectedFile.size,
           status: "Processed"
         }
+
       ])
 
-      // Keep selected file visible
-      // setSelectedFile(null)
 
-    }, 4000)
+      setInspectionResult(data)
+
+      setIsProcessing(false)
+
+
+      alert(
+        `Inspection completed successfully!\n\nAssessment: ${
+          data.analysis?.overall_assessment ||
+          "Analysis completed"
+        }`
+      )
+
+
+    } catch (error) {
+
+      console.error(
+        "Backend integration error:",
+        error
+      )
+
+
+      setIsProcessing(false)
+
+
+      setActivitySteps([
+
+        createActivityStep(
+          "Document uploaded",
+          "completed",
+          startTime.toLocaleTimeString()
+        ),
+
+        createActivityStep(
+          "Backend processing failed",
+          "active",
+          new Date().toLocaleTimeString()
+        )
+
+      ])
+
+
+      alert(
+        `Could not process the document.\n\n${error.message}`
+      )
+
+    }
+
   }
 
 
-  // ================= CODING AGENT =================
+  // =====================================================
+  // CODING AGENT
+  // =====================================================
 
-  const handleCodingAgent = () => {
-    if (!codingTask.trim()) return
+// =====================================================
+// CODING AGENT
+// =====================================================
+
+const handleCodingAgent = async () => {
+
+  if (!codingTask.trim()) return
+
+  const startTime = new Date()
+
+  setCodingResult(null)
+
+  setActivitySteps([
+
+    createActivityStep(
+      "Coding task received",
+      "completed",
+      startTime.toLocaleTimeString()
+    ),
+
+    createActivityStep(
+      "Coding model selected",
+      "completed",
+      new Date().toLocaleTimeString()
+    ),
+
+    createActivityStep(
+      "Generating code locally",
+      "active",
+      new Date().toLocaleTimeString()
+    ),
+
+    createActivityStep(
+      "Sandbox verification",
+      "pending",
+      "--"
+    )
+
+  ])
+
+
+  try {
+
+    const response = await fetch(
+      "/api/agent/code",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          task: codingTask
+        })
+      }
+    )
+
+
+    const data = await response.json()
+
+
+    if (!response.ok || data.status !== "success") {
+
+      throw new Error(
+        data.message || "Coding agent failed"
+      )
+
+    }
+
+
+    const completedTime =
+      new Date().toLocaleTimeString()
+
 
     setCodingResult({
-      model: "qwen2.5-coder:1.5b",
-      status: "PASSED",
-      code: `def solve():
-    numbers = [1, 2, 3, 4, 5]
-    total = sum(numbers)
-    print("Total:", total)
 
-solve()`,
-      output: "Total: 15"
+      model: data.selected_model,
+
+status:
+  data.sandbox_status === "PASSED"
+    ? "PASSED"
+    : "FAILED",
+
+      code: data.generated_code,
+
+      output: data.execution_output,
+
+      error: data.execution_error
+
     })
+
+
+    setActivitySteps([
+
+      createActivityStep(
+        "Coding task received",
+        "completed",
+        startTime.toLocaleTimeString()
+      ),
+
+      createActivityStep(
+        `Coding model selected: ${data.selected_model}`,
+        "completed",
+        completedTime
+      ),
+
+      createActivityStep(
+        "Code generated locally",
+        "completed",
+        completedTime
+      ),
+
+      createActivityStep(
+        `Sandbox verification: ${
+          data.sandbox_status === "PASSED"
+            ? "PASSED"
+            : "FAILED"
+        }`,
+        data.sandbox_status === "PASSED"
+          ? "completed"
+          : "active",
+        completedTime
+      )
+
+    ])
+
+
+    console.log(
+      "Backend coding agent result:",
+      data
+    )
+
+
+  } catch (error) {
+
+    console.error(
+      "Coding agent error:",
+      error
+    )
+
+
+    setCodingResult({
+
+      model: "qwen2.5-coder:1.5b",
+
+      status: "FAILED",
+
+      code: "",
+
+      output: "",
+
+      error: error.message
+
+    })
+
+
+    setActivitySteps([
+
+      createActivityStep(
+        "Coding task received",
+        "completed",
+        startTime.toLocaleTimeString()
+      ),
+
+      createActivityStep(
+        "Coding agent execution failed",
+        "active",
+        new Date().toLocaleTimeString()
+      )
+
+    ])
+
   }
 
+}
 
-  // ================= CHAT =================
+// =====================================================
+// CHAT
+// =====================================================
 
-  const handleSendMessage = () => {
-    if (!chatInput.trim()) return
+const handleSendMessage = async () => {
 
-    const userMessage = chatInput
+  if (!chatInput.trim()) return
+
+  const userMessage = chatInput
+
+  const startTime = new Date()
+
+  setChatMessages((previousMessages) => [
+    ...previousMessages,
+    {
+      role: "user",
+      text: userMessage
+    }
+  ])
+
+  setChatInput("")
+
+  // =====================================================
+  // RAG ACTIVITY - START
+  // =====================================================
+
+  setActivitySteps([
+
+    createActivityStep(
+      "Assistant query received",
+      "completed",
+      startTime.toLocaleTimeString()
+    ),
+
+    createActivityStep(
+      "Searching local knowledge base",
+      "active",
+      startTime.toLocaleTimeString()
+    ),
+
+    createActivityStep(
+      "Relevant document retrieval",
+      "pending",
+      "--"
+    ),
+
+    createActivityStep(
+      "Local AI answer generation",
+      "pending",
+      "--"
+    )
+
+  ])
+
+  try {
+
+    const response = await fetch(
+      "/api/rag/query",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          query: userMessage
+        })
+      }
+    )
+
+    const data = await response.json()
+
+    if (!response.ok || data.status !== "success") {
+
+      throw new Error(
+        data.message || "RAG request failed"
+      )
+
+    }
+
+    const completedTime =
+      new Date().toLocaleTimeString()
+
+    // =====================================================
+    // RAG ACTIVITY - COMPLETED
+    // =====================================================
+
+    setActivitySteps([
+
+      createActivityStep(
+        "Assistant query received",
+        "completed",
+        startTime.toLocaleTimeString()
+      ),
+
+      createActivityStep(
+        "Local knowledge base searched",
+        "completed",
+        completedTime
+      ),
+
+      createActivityStep(
+        "Relevant document retrieved",
+        "completed",
+        completedTime
+      ),
+
+      createActivityStep(
+        "Answer generated by local AI",
+        "completed",
+        completedTime
+      )
+
+    ])
 
     setChatMessages((previousMessages) => [
       ...previousMessages,
       {
-        role: "user",
-        text: userMessage
+        role: "assistant",
+        text:
+          data.answer ||
+          data.message ||
+          "No relevant information found."
       }
     ])
 
-    setChatInput("")
+    console.log(
+      "Backend RAG result:",
+      data
+    )
 
-    setTimeout(() => {
-      setChatMessages((previousMessages) => [
-        ...previousMessages,
-        {
-          role: "assistant",
-          text:
-            "I can analyze your confidential documents locally. No external AI calls are required."
-        }
-      ])
-    }, 800)
+  } catch (error) {
+
+    console.error(
+      "RAG backend error:",
+      error
+    )
+
+    setActivitySteps([
+
+      createActivityStep(
+        "Assistant query received",
+        "completed",
+        startTime.toLocaleTimeString()
+      ),
+
+      createActivityStep(
+        "Local knowledge base search failed",
+        "active",
+        new Date().toLocaleTimeString()
+      )
+
+    ])
+
+    setChatMessages((previousMessages) => [
+      ...previousMessages,
+      {
+        role: "assistant",
+        text:
+          "Could not retrieve information from the local knowledge base."
+      }
+    ])
+
   }
+}
 
-
-  // ================= LOGIN CHECK =================
+  // =====================================================
+  // LOGIN
+  // =====================================================
 
   if (!isLoggedIn) {
+
     return (
+
       <Login
         onLogin={() => setIsLoggedIn(true)}
       />
+
     )
+
   }
 
 
-  // ================= UI =================
+  // =====================================================
+  // MAIN UI
+  // =====================================================
 
   return (
+
     <div className="app">
 
-      {/* ================= HEADER ================= */}
+      {/* HEADER */}
 
       <header className="header">
 
@@ -352,12 +738,12 @@ solve()`,
       </header>
 
 
-      {/* ================= MAIN LAYOUT ================= */}
+      {/* MAIN LAYOUT */}
 
       <div className="main-layout">
 
 
-        {/* ================= SIDEBAR ================= */}
+        {/* SIDEBAR */}
 
         <aside className="sidebar">
 
@@ -371,9 +757,16 @@ solve()`,
 
                 <div
                   key={item.name}
-                  className={`nav-item ${activeItem === item.name ? "active" : ""
-                    }`}
-                  onClick={() => setActiveItem(item.name)}
+                  className={
+                    `nav-item ${
+                      activeItem === item.name
+                        ? "active"
+                        : ""
+                    }`
+                  }
+                  onClick={() =>
+                    setActiveItem(item.name)
+                  }
                 >
 
                   <Icon size={20} />
@@ -385,12 +778,11 @@ solve()`,
                 </div>
 
               )
+
             })}
 
           </div>
 
-
-          {/* Local System */}
 
           <div className="local-system">
 
@@ -411,12 +803,14 @@ solve()`,
         </aside>
 
 
-        {/* ================= WORKSPACE ================= */}
+        {/* WORKSPACE */}
 
         <main className="workspace">
 
 
-          {/* ================= DASHBOARD ================= */}
+          {/* =================================================
+              DASHBOARD
+          ================================================= */}
 
           {activeItem === "Dashboard" && (
 
@@ -434,11 +828,11 @@ solve()`,
               <div className="dashboard-cards">
 
 
-                {/* Documents */}
-
                 <div
                   className="dashboard-card"
-                  onClick={() => setActiveItem("Documents")}
+                  onClick={() =>
+                    setActiveItem("Documents")
+                  }
                 >
 
                   <div className="card-icon">
@@ -460,11 +854,11 @@ solve()`,
                 </div>
 
 
-                {/* Models */}
-
                 <div
                   className="dashboard-card"
-                  onClick={() => setActiveItem("Models")}
+                  onClick={() =>
+                    setActiveItem("Models")
+                  }
                 >
 
                   <div className="card-icon">
@@ -486,11 +880,11 @@ solve()`,
                 </div>
 
 
-                {/* Security */}
-
                 <div
                   className="dashboard-card"
-                  onClick={() => setActiveItem("Security")}
+                  onClick={() =>
+                    setActiveItem("Security")
+                  }
                 >
 
                   <div className="card-icon">
@@ -518,7 +912,9 @@ solve()`,
           )}
 
 
-          {/* ================= DOCUMENTS ================= */}
+          {/* =================================================
+              DOCUMENTS
+          ================================================= */}
 
           {activeItem === "Documents" && (
 
@@ -549,7 +945,9 @@ solve()`,
                 <input
                   type="file"
                   ref={fileInputRef}
-                  style={{ display: "none" }}
+                  style={{
+                    display: "none"
+                  }}
                   accept=".pdf,.docx,.png,.jpg,.jpeg"
                   onChange={handleFileSelect}
                 />
@@ -627,30 +1025,32 @@ solve()`,
                     </h3>
 
 
-                    {documents.map((document, index) => (
+                    {documents.map(
+                      (document, index) => (
 
-                      <div
-                        className="processed-document"
-                        key={`${document.name}-${index}`}
-                      >
+                        <div
+                          className="processed-document"
+                          key={`${document.name}-${index}`}
+                        >
 
-                        <FileText size={18} />
+                          <FileText size={18} />
 
-                        <div>
+                          <div>
 
-                          <strong>
-                            {document.name}
-                          </strong>
+                            <strong>
+                              {document.name}
+                            </strong>
 
-                          <span>
-                            Processed locally
-                          </span>
+                            <span>
+                              Processed locally
+                            </span>
+
+                          </div>
 
                         </div>
 
-                      </div>
-
-                    ))}
+                      )
+                    )}
 
                   </div>
 
@@ -664,9 +1064,11 @@ solve()`,
               </div>
 
 
-              {/* ================= INSPECTION ANALYSIS ================= */}
+              {/* =================================================
+                  INSPECTION ANALYSIS
+              ================================================= */}
 
-              {selectedFile && (
+              {inspectionResult && (
 
                 <div className="inspection-results">
 
@@ -677,6 +1079,7 @@ solve()`,
 
                   <div className="inspection-summary">
 
+
                     <div className="result-card">
 
                       <span className="result-label">
@@ -684,7 +1087,7 @@ solve()`,
                       </span>
 
                       <strong>
-                        qwen2.5:1.5b
+                        {inspectionResult.model}
                       </strong>
 
                     </div>
@@ -718,6 +1121,8 @@ solve()`,
                   </div>
 
 
+                  {/* OVERALL ASSESSMENT */}
+
                   <div className="result-section">
 
                     <h3>
@@ -725,11 +1130,20 @@ solve()`,
                     </h3>
 
                     <div className="assessment">
-                      HIGH RISK
+
+                      {
+                        inspectionResult
+                          .analysis
+                          ?.overall_assessment
+                          || "Not available"
+                      }
+
                     </div>
 
                   </div>
 
+
+                  {/* FINDINGS */}
 
                   <div className="result-section">
 
@@ -737,24 +1151,30 @@ solve()`,
                       Findings
                     </h3>
 
+
                     <ul>
 
-                      <li>
-                        Visible component wear detected
-                      </li>
+                      {
+                        inspectionResult
+                          .analysis
+                          ?.key_findings
+                          ?.map(
+                            (finding, index) => (
 
-                      <li>
-                        Potential maintenance issue identified
-                      </li>
+                              <li key={index}>
+                                {finding}
+                              </li>
 
-                      <li>
-                        Further inspection recommended
-                      </li>
+                            )
+                          )
+                      }
 
                     </ul>
 
                   </div>
 
+
+                  {/* RECOMMENDED ACTIONS */}
 
                   <div className="result-section">
 
@@ -762,24 +1182,30 @@ solve()`,
                       Recommended Actions
                     </h3>
 
+
                     <ul>
 
-                      <li>
-                        Perform detailed component inspection
-                      </li>
+                      {
+                        inspectionResult
+                          .analysis
+                          ?.recommended_actions
+                          ?.map(
+                            (action, index) => (
 
-                      <li>
-                        Schedule preventive maintenance
-                      </li>
+                              <li key={index}>
+                                {action}
+                              </li>
 
-                      <li>
-                        Verify equipment safety before operation
-                      </li>
+                            )
+                          )
+                      }
 
                     </ul>
 
                   </div>
 
+
+                  {/* REPORT */}
 
                   <div className="report-section">
 
@@ -791,54 +1217,18 @@ solve()`,
                       Inspection_Report.docx
                     </p>
 
+
                     <button
-                      className="process-button"
-                      onClick={() => {
-
-                        const report = `SOVEREIGN AI WORKBENCH
-Inspection Report
-
-Model: qwen2.5:1.5b
-Processing: Local / On-Premise
-Status: Analysis Complete
-Assessment: HIGH RISK
-
-Findings:
-- Visible component wear detected
-- Potential maintenance issue identified
-- Further inspection recommended
-
-Recommended Actions:
-- Perform detailed component inspection
-- Schedule preventive maintenance
-- Verify equipment safety before operation
-`
-
-                        const blob = new Blob(
-                          [report],
-                          {
-                            type: "text/plain"
-                          }
-                        )
-
-                        const url =
-                          URL.createObjectURL(blob)
-
-                        const link =
-                          document.createElement("a")
-
-                        link.href = url
-                        link.download =
-                          "Inspection_Report.txt"
-
-                        link.click()
-
-                        URL.revokeObjectURL(url)
-
-                      }}
-                    >
-                      Download Report
-                    </button>
+  className="process-button"
+  onClick={() => {
+    window.open(
+      "/api/report/download",
+      "_blank"
+    )
+  }}
+>
+  Download Report
+</button>
 
                   </div>
 
@@ -851,7 +1241,9 @@ Recommended Actions:
           )}
 
 
-          {/* ================= CODING AGENT ================= */}
+          {/* =================================================
+              CODING AGENT
+          ================================================= */}
 
           {activeItem === "Coding Agent" && (
 
@@ -872,6 +1264,7 @@ Recommended Actions:
                   Coding Task
                 </h2>
 
+
                 <textarea
                   className="coding-input"
                   placeholder="Describe the coding task you want the local AI agent to solve..."
@@ -880,6 +1273,7 @@ Recommended Actions:
                     setCodingTask(event.target.value)
                   }
                 />
+
 
                 <button
                   className="process-button"
@@ -951,7 +1345,9 @@ Recommended Actions:
           )}
 
 
-          {/* ================= ASSISTANT ================= */}
+          {/* =================================================
+              ASSISTANT
+          ================================================= */}
 
           {activeItem === "Assistant" && (
 
@@ -1035,45 +1431,47 @@ Recommended Actions:
 
                   ) : (
 
-                    chatMessages.map((message, index) => (
+                    chatMessages.map(
+                      (message, index) => (
 
-                      <div
-                        key={index}
-                        className={
-                          message.role === "user"
-                            ? "user-message"
-                            : "assistant-message"
-                        }
-                      >
+                        <div
+                          key={index}
+                          className={
+                            message.role === "user"
+                              ? "user-message"
+                              : "assistant-message"
+                          }
+                        >
 
-                        <div className="message-icon">
-
-                          {message.role === "user"
-                            ? "U"
-                            : <Brain size={18} />}
-
-                        </div>
-
-
-                        <div>
-
-                          <strong>
+                          <div className="message-icon">
 
                             {message.role === "user"
-                              ? "You"
-                              : "Local AI Assistant"}
+                              ? "U"
+                              : <Brain size={18} />}
 
-                          </strong>
+                          </div>
 
-                          <p>
-                            {message.text}
-                          </p>
+
+                          <div>
+
+                            <strong>
+
+                              {message.role === "user"
+                                ? "You"
+                                : "Local AI Assistant"}
+
+                            </strong>
+
+                            <p>
+                              {message.text}
+                            </p>
+
+                          </div>
 
                         </div>
 
-                      </div>
-
-                    ))
+                      )
+                    )
 
                   )}
 
@@ -1122,7 +1520,9 @@ Recommended Actions:
           )}
 
 
-          {/* ================= ACTIVITY ================= */}
+          {/* =================================================
+              ACTIVITY
+          ================================================= */}
 
           {activeItem === "Activity" && (
 
@@ -1166,39 +1566,43 @@ Recommended Actions:
 
                     <div className="activity-list">
 
-                      {activitySteps.map((step, index) => (
+                      {activitySteps.map(
+                        (step, index) => (
 
-                        <div
-                          className={`activity-step ${step.status}`}
-                          key={index}
-                        >
+                          <div
+                            className={
+                              `activity-step ${step.status}`
+                            }
+                            key={index}
+                          >
 
-                          <div className="activity-indicator">
+                            <div className="activity-indicator">
 
-                            {step.status === "completed" && "✓"}
+                              {step.status === "completed" && "✓"}
 
-                            {step.status === "active" && "●"}
+                              {step.status === "active" && "●"}
 
-                            {step.status === "pending" && "○"}
+                              {step.status === "pending" && "○"}
+
+                            </div>
+
+
+                            <div className="activity-step-content">
+
+                              <span>
+                                {step.text}
+                              </span>
+
+                              <small>
+                                {step.time}
+                              </small>
+
+                            </div>
 
                           </div>
 
-
-                          <div className="activity-step-content">
-
-                            <span>
-                              {step.text}
-                            </span>
-
-                            <small>
-                              {step.time}
-                            </small>
-
-                          </div>
-
-                        </div>
-
-                      ))}
+                        )
+                      )}
 
                     </div>
 
@@ -1213,7 +1617,9 @@ Recommended Actions:
           )}
 
 
-          {/* ================= MODELS ================= */}
+          {/* =================================================
+              MODELS
+          ================================================= */}
 
           {activeItem === "Models" && (
 
@@ -1254,97 +1660,130 @@ Recommended Actions:
 
                 <div className="model-list">
 
+  {localModels.map((model) => (
 
-                  {/* Qwen 2.5 1.5B */}
+    <div className="model-card" key={model.name}>
 
-                  <div className="model-card">
+      <div className="model-icon">
+        <Brain size={22} />
+      </div>
 
-                    <div className="model-icon">
-                      <Brain size={22} />
-                    </div>
+      <div className="model-info">
 
-                    <div className="model-info">
+        <h3>
+          {model.name}
+        </h3>
 
-                      <h3>
-                        qwen2.5:1.5b
-                      </h3>
+        <p>
+          {model.name.includes("coder")
+            ? "Local code generation and verification"
+            : "General and industrial inspection analysis"}
+        </p>
 
-                      <p>
-                        General and industrial inspection analysis
-                      </p>
+        <span className="model-type">
+          {model.name.includes("coder")
+            ? "Coding"
+            : "Analysis"}
+        </span>
 
-                      <span className="model-type">
-                        Multimodal / Analysis
-                      </span>
+      </div>
 
-                    </div>
+      <div className="model-status">
+        Available
+      </div>
 
-                    <div className="model-status">
-                      Available
-                    </div>
+    </div>
 
-                  </div>
+  ))}
 
-
-                  {/* Qwen2.5-Coder 1.5B */}
-
-                  <div className="model-card">
-
-                    <div className="model-icon">
-                      <Brain size={22} />
-                    </div>
-
-                    <div className="model-info">
-
-                      <h3>
-                        qwen2.5-coder:1.5b
-                      </h3>
-
-                      <p>
-                        Local code generation and verification
-                      </p>
-
-                      <span className="model-type">
-                        Coding
-                      </span>
-
-                    </div>
-
-                    <div className="model-status">
-                      Available
-                    </div>
-
-                  </div>
-
-                </div>
+</div>
 
 
-                {/* Automatic Model Selection */}
+ <div className="routing-box">
 
-                <div className="routing-box">
+  <div className="routing-icon">
+    <Activity size={20} />
+  </div>
 
-                  <div className="routing-icon">
-                    <Activity size={20} />
-                  </div>
+  <div>
 
-                  <div>
+    <h3>
+      Automatic Model Selection
+    </h3>
 
-                    <h3>
-                      Automatic Model Selection
-                    </h3>
+    <p>
+      The workbench selects the most suitable
+      local model based on the current task.
+    </p>
 
-                    <p>
-                      The workbench selects the most suitable
-                      local model based on the current task.
-                    </p>
+    <input
+      type="text"
+      placeholder="Enter a task to test model selection..."
+      className="routing-input"
+      onKeyDown={(event) => {
 
-                  </div>
+        if (event.key === "Enter") {
+          handleModelSelection(event.target.value)
+        }
 
-                  <span className="routing-status">
-                    ENABLED
-                  </span>
+      }}
+    />
 
-                </div>
+    <button
+      className="routing-button"
+      onClick={() => {
+
+        const input =
+          document.querySelector(".routing-input")
+
+        if (input) {
+          handleModelSelection(input.value)
+        }
+
+      }}
+    >
+      Test Model Selection
+    </button>
+
+    {modelSelection && (
+
+      <div className="routing-result">
+
+        <strong>
+          Selected Model:
+        </strong>
+
+        <span>
+          {modelSelection.selected_model}
+        </span>
+
+        <strong>
+          Task Type:
+        </strong>
+
+        <span>
+          {modelSelection.task_type}
+        </span>
+
+        <strong>
+          Processing:
+        </strong>
+
+        <span>
+          {modelSelection.processing_mode}
+        </span>
+
+      </div>
+
+    )}
+
+  </div>
+
+  <span className="routing-status">
+    ENABLED
+  </span>
+
+</div>
 
               </div>
 
@@ -1353,98 +1792,199 @@ Recommended Actions:
           )}
 
 
-          {/* ================= SECURITY ================= */}
+{/* =================================================
+    SECURITY
+================================================= */}
 
-          {activeItem === "Security" && (
+{activeItem === "Security" && (
 
-            <>
+  <>
 
-              <h1>
-                Security & Sovereignty
-              </h1>
+    <h1>
+      Security & Sovereignty
+    </h1>
 
-              <p className="workspace-subtitle">
-                Monitor the security status of your AI environment.
-              </p>
-
-
-              <div className="security-status">
-
-
-                {/* Inference */}
-
-                <div className="security-item">
-
-                  <Server size={22} />
-
-                  <div>
-
-                    <strong>
-                      Inference
-                    </strong>
-
-                    <span>
-                      Running locally
-                    </span>
-
-                  </div>
-
-                </div>
+    <p className="workspace-subtitle">
+      Monitor the security status of your AI environment.
+    </p>
 
 
-                {/* External Calls */}
-
-                <div className="security-item">
-
-                  <Lock size={22} />
-
-                  <div>
-
-                    <strong>
-                      External Calls
-                    </strong>
-
-                    <span>
-                      0 detected
-                    </span>
-
-                  </div>
-
-                </div>
+    <div className="security-status">
 
 
-                {/* Data Storage */}
+      <div className="security-item">
 
-                <div className="security-item">
+        <Server size={22} />
 
-                  <Database size={22} />
+        <div>
 
-                  <div>
+          <strong>
+            Inference
+          </strong>
 
-                    <strong>
-                      Data Storage
-                    </strong>
+          <span>
+            Running locally
+          </span>
 
-                    <span>
-                      Local environment
-                    </span>
+        </div>
 
-                  </div>
+      </div>
 
-                </div>
 
-              </div>
+      <div className="security-item">
 
-            </>
+        <Lock size={22} />
 
-          )}
+        <div>
+
+          <strong>
+            External Calls
+          </strong>
+
+          <span>
+            0 detected
+          </span>
+
+        </div>
+
+      </div>
+
+
+      <div className="security-item">
+
+        <Database size={22} />
+
+        <div>
+
+          <strong>
+            Data Storage
+          </strong>
+
+          <span>
+            Local environment
+          </span>
+
+        </div>
+
+      </div>
+
+
+    </div>
+
+
+    {/* =================================================
+        SOVEREIGNTY VERIFICATION
+    ================================================= */}
+
+    <div className="sovereignty-panel">
+
+      <div className="sovereignty-header">
+
+        <div>
+
+          <h2>
+            Sovereignty Verification
+          </h2>
+
+          <p>
+            Verify that AI processing and data handling remain
+            inside the local environment.
+          </p>
+
+        </div>
+
+        <span className="verified-badge">
+          VERIFIED
+        </span>
+
+      </div>
+
+
+      <div className="verification-list">
+
+
+        <div className="verification-item">
+
+          <span>
+            AI Inference
+          </span>
+
+          <strong>
+            LOCAL
+          </strong>
+
+        </div>
+
+
+        <div className="verification-item">
+
+          <span>
+            Model Hosting
+          </span>
+
+          <strong>
+            ON-PREMISE
+          </strong>
+
+        </div>
+
+
+        <div className="verification-item">
+
+          <span>
+            Knowledge Base
+          </span>
+
+          <strong>
+            LOCAL
+          </strong>
+
+        </div>
+
+
+        <div className="verification-item">
+
+          <span>
+            External AI APIs
+          </span>
+
+          <strong>
+            NONE
+          </strong>
+
+        </div>
+
+
+        <div className="verification-item">
+
+          <span>
+            Data Transmission
+          </span>
+
+          <strong>
+            DISABLED
+          </strong>
+
+        </div>
+
+
+      </div>
+
+    </div>
+
+  </>
+
+)}
+
 
         </main>
 
       </div>
 
     </div>
+
   )
+
 }
 
 export default App

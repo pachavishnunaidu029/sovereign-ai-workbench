@@ -8,3 +8,4 @@ backend/activity.log
 .env
 .env.*
 !.env.example
+backend/main_backup.py
